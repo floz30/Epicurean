@@ -1,34 +1,40 @@
 package fr.floz.epicurian.data
 
-import fr.floz.epicurian.R
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Static data of [Restaurant].
  */
-class RestaurantsRepositoryImpl : RestaurantsRepository {
+@Singleton
+class RestaurantsRepositoryImpl @Inject constructor(
+    private val restaurantDao: RestaurantDao
+) : RestaurantsRepository {
 
-    override fun getAllRestaurants(): Flow<List<Restaurant>> = flow {
-        emit(listOf(
+    override suspend fun deleteRestaurant(restaurant: Restaurant) {
+        restaurantDao.delete(restaurant)
+    }
+
+    override fun getAllOrderedByLastCreated(): Flow<List<Restaurant>> {
+        return restaurantDao.getAllOrderedByLastCreated()
+    }
+
+    override fun getAllOrderedByName(): Flow<List<Restaurant>> {
+        return restaurantDao.getAllOrderedByName()
+    }
+
+    override suspend fun insertRestaurant(name: String, location: String) {
+        restaurantDao.upsert(
             Restaurant(
-                1L,
-                "Nom restaurant 1",
-                "Thai",
-                "Gagny",
-                R.drawable.ic_launcher_background),
-            Restaurant(
-                2L,
-                "Nom restaurant 2",
-                "Française",
-                "Chelles",
-                R.drawable.ic_launcher_background),
-            Restaurant(
-                3L,
-                "Nom restaurant 3",
-                "Italienne",
-                "Noisy le Grand",
-                R.drawable.ic_launcher_background)
-        ))
+                name = name,
+                location = location,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    override suspend fun updateRestaurant(restaurant: Restaurant) {
+        restaurantDao.upsert(restaurant)
     }
 }

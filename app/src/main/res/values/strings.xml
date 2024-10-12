@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Epicurian</string>
+    <string name="restaurants">Restaurants</string>
+    <string name="map">Carte</string>
+    <string name="settings">Paramètres</string>
 </resources>
