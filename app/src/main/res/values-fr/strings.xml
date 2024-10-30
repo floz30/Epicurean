@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restaurants">Restaurants</string>
+    <string name="map">Carte</string>
+    <string name="settings">Paramètres</string>
+    <string name="settings_appearance">Apparence</string>
+    <string name="settings_about">A propos</string>
+    <string name="settings_data">Données et espace de stockage</string>
+    <string name="settings_appearance_language">Langue</string>
+    <string name="settings_appearance_theme">Thème</string>
+    <string name="settings_appearance_theme_light">Clair</string>
+    <string name="settings_appearance_theme_dark">Sombre</string>
+    <string name="settings_appearance_theme_system">Valeur par défaut du système</string>
+    <string name="restaurant_info_wheelchair_label">Accessible</string>
+    <string name="restaurant_info_open">Ouvert</string>
+    <string name="restaurant_info_closed">Fermé</string>
+    <string name="restaurant_info_wheelchair_description">Indique si le lieu peut être utilisé avec un fauteuil roulant</string>
+    <string name="restaurant_info_opening_hours">Horaire d\'ouverture</string>
+    <string name="restaurant_info_type">Type</string>
+    <string name="restaurant_type_asian">Asiatique</string>
+    <string name="restaurant_type_pizza">Pizzeria</string>
+    <string name="action_locate_restaurant">Voir sur la carte</string>
+    <string name="element_type_fast_food">Fast-food</string>
+    <string name="restaurant_type_default">Inconnu</string>
+    <string name="element_type_food_court">Aire de restauration</string>
+    <string name="element_type_bar">Bar</string>
+    <string name="element_type_cafe">Café</string>
+    <string name="element_type_ice_cream">Glacier</string>
+    <string name="element_type_pub">Pub</string>
+    <string name="element_type_restaurant">Restaurant</string>
+    <string name="element_type_unknown">Inconnu</string>
+</resources>
