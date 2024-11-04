@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-    namespace = "fr.floz.epicurian"
+    namespace = "fr.floz.epicurean"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "fr.floz.epicurian"
+        applicationId = "fr.floz.epicurean"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

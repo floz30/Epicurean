@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Epicurian"
+rootProject.name = "Epicurean"
 include(":app")
  
