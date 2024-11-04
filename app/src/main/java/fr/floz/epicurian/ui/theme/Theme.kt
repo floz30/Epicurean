@@ -86,7 +86,7 @@ fun supportsDynamic() : Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 
 @Composable
-fun EpicurianTheme(
+fun EpicureanTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true, // Dynamic color is available on Android 12+
     content: @Composable () -> Unit,
