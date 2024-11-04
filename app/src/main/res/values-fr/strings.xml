@@ -29,4 +29,5 @@
     <string name="element_type_pub">Pub</string>
     <string name="element_type_restaurant">Restaurant</string>
     <string name="element_type_unknown">Inconnu</string>
+    <string name="app_navigation_back">Retour en arrière</string>
 </resources>
