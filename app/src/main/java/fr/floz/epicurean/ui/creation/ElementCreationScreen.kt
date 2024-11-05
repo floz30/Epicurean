@@ -106,9 +106,13 @@ fun CreationHomeScreen(
     val locationPermissionResultLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         viewModel.onPermissionResult(Manifest.permission.ACCESS_COARSE_LOCATION, isGranted) { viewModel.resolveLocation() }
     }
-    if (viewModel.isLocationPermissionAlreadyGranted()) {
-        viewModel.resolveLocation()
-    }
+    viewModel.resolveLocation()
+
+//    if (viewModel.showToast.value) {
+//        Toast.makeText(LocalContext.current, "Localisation indisponible sur votre appareil", Toast.LENGTH_LONG).show()
+//        viewModel.showToast.value = false
+//    }
+
     dialogQueue
         .reversed()
         .forEach { permission ->

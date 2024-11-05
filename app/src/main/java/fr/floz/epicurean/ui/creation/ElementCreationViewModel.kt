@@ -1,12 +1,8 @@
 package fr.floz.epicurean.ui.creation
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
-import android.content.pm.PackageManager
-import android.location.LocationManager
-import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.shape.CircleShape
@@ -18,14 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import de.westnordost.osm_opening_hours.parser.toOpeningHoursOrNull
 import fr.floz.epicurean.data.mapper.CoordinatesMapper
+import fr.floz.epicurean.data.services.LocationServices
 import fr.floz.epicurean.data.services.remote.OverpassApi
 import fr.floz.epicurean.data.services.remote.responses.Node
 import fr.floz.epicurean.data.services.remote.responses.OverpassResponse
@@ -39,6 +33,7 @@ import fr.floz.epicurean.domain.entities.coordinates.Gps
 import fr.floz.epicurean.domain.entities.coordinates.Mercator
 import fr.floz.epicurean.domain.entities.toElementType
 import fr.floz.epicurean.domain.repo.ElementsRepository
+import fr.floz.epicurean.utils.doublePulseEffect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,9 +43,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ovh.plrapps.mapcompose.api.addLayer
 import ovh.plrapps.mapcompose.api.addMarker
+import ovh.plrapps.mapcompose.api.centerOnMarker
 import ovh.plrapps.mapcompose.api.onLongPress
+import ovh.plrapps.mapcompose.api.removeMarker
 import ovh.plrapps.mapcompose.api.scale
-import ovh.plrapps.mapcompose.api.scrollTo
 import ovh.plrapps.mapcompose.core.TileStreamProvider
 import ovh.plrapps.mapcompose.ui.layout.Forced
 import ovh.plrapps.mapcompose.ui.state.MapState
@@ -65,7 +61,7 @@ import kotlin.math.pow
 class ElementCreationViewModel @Inject constructor(
     private val repository: ElementsRepository,
     private val overpassApi: OverpassApi,
-    @ApplicationContext private val context: Context
+    private val locationServices: LocationServices
 ) : ViewModel() {
 
     private val _osmElements = MutableStateFlow(emptyList<Element>())
@@ -78,9 +74,6 @@ class ElementCreationViewModel @Inject constructor(
 
     var isLocationSelected by mutableStateOf(false)
         private set
-
-
-    private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
     fun setLocationSelectedOrSkipped(value: Boolean) {
         isLocationSelected = value
@@ -105,7 +98,6 @@ class ElementCreationViewModel @Inject constructor(
 
     private val tileStreamProvider = TileStreamProvider { row, col, zoom ->
         try {
-            //val url = URL("https://api.maptiler.com/maps/basic-v2/256/$zoom/$col/$row.png?key=$key")
             val url = URL("https://tile.openstreetmap.org/$zoom/$col/$row.png")
             val connection = url.openConnection() as HttpURLConnection
             connection.setRequestProperty("User-Agent", "Chrome/120.0.0.0 Safari/537.36")
@@ -141,35 +133,47 @@ class ElementCreationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * If userLocation is not null, add a marker to user's position and zoom on it.
+     */
     private fun showAndZoomOnUserLocation() {
-        val location = CoordinatesMapper.mapFromEntity(Gps(_state.value.userLocation.latitude, _state.value.userLocation.longitude))
-        createUserMarker(location)
-        viewModelScope.launch {
-            mapState.scrollTo(x = location.x, y = location.y, destScale = 0.7f)
+        if (_state.value.userLocation == null) {
+            // TODO avertir l'utilisateur
+        } else {
+            val location = CoordinatesMapper.mapFromEntity(Gps(_state.value.userLocation!!.latitude, _state.value.userLocation!!.longitude))
+
+            createUserMarker(location)
+
+            viewModelScope.launch {
+                mapState.centerOnMarker("userLocation", destScale = 0.7f)
+            }
         }
     }
 
+    val showToast = mutableStateOf(false)
+
+
     /**
-     * Affiche un rond à l'emplacement de l'utilisateur s'il n'existe pas encore
+     * Displays a blue circle over the user's location.
      */
     private fun createUserMarker(location: Mercator) {
-        if (!_state.value.isUserLocationShow) {
-            mapState.addMarker("userLocation", location.x, location.y, zIndex = 5f, clickable = false) {
-                Box(Modifier.requiredSize(10.dp).clip(CircleShape).background(Color.Blue))
-            }
-            _state.update { it.copy(
-                isUserLocationShow = true
-            ) }
+        mapState.removeMarker("userLocation")
+        mapState.addMarker("userLocation", location.x, location.y, clickable =false) {
+            Box(Modifier
+                .doublePulseEffect(targetScale = 5.5f, duration = 2500)
+                .requiredSize(10.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF1E90FF), CircleShape)
+                .border(1.dp, Color(0xFFFFFFFF), CircleShape)
+            )
         }
     }
 
     // permission
     val visiblePermissionDialogQueue = mutableStateListOf<String>()
-
     fun dismissDialog() {
         visiblePermissionDialogQueue.removeAt(0)
     }
-
     fun onPermissionResult(permission: String, isGranted: Boolean, onGrantedPermission: () -> Unit) {
         if(!isGranted && !visiblePermissionDialogQueue.contains(permission)) {
             visiblePermissionDialogQueue.add(permission)
@@ -179,10 +183,7 @@ class ElementCreationViewModel @Inject constructor(
     }
 
 
-    //var showRationale by mutableStateOf(false)
-
-
-    fun onLongTap(x: Double, y: Double) {
+    private fun onLongTap(x: Double, y: Double) {
         val gpsCoordinates = CoordinatesMapper.mapToEntity(Mercator(x, y))
         viewModelScope.launch {
             val response = overpassApi.getElementsAroundLocation(gpsCoordinates.latitude, gpsCoordinates.longitude)
@@ -192,10 +193,7 @@ class ElementCreationViewModel @Inject constructor(
                     showOsmDialog = true
                 ) }
             }
-
-
         }
-
     }
 
     private fun mapOverpassResponseToRestaurants(response: OverpassResponse): List<Element> {
@@ -393,7 +391,7 @@ class ElementCreationViewModel @Inject constructor(
                 cuisine = element.cuisines,
                 phone = element.phone ?: "",
                 website = element.website ?: "",
-                isUserLocationShow = element.isWheelchairAccessible,
+                isWheelchairAccessible = element.isWheelchairAccessible,
                 houseNumber = element.address.houseNumber?.toString() ?: "",
                 streetName = element.address.streetName ?: "",
                 postCode = element.address.postCode?.toString() ?: "",
@@ -415,7 +413,7 @@ class ElementCreationViewModel @Inject constructor(
             cuisine = emptyList(),
             phone = "",
             website = "",
-            isUserLocationShow = false,
+            isWheelchairAccessible = false,
             openingHours = "",
             houseNumber = "",
             streetName = "",
@@ -424,34 +422,16 @@ class ElementCreationViewModel @Inject constructor(
         ) }
     }
 
-    fun updateUserLocation(latitude: Double, longitude: Double) {
-        _state.update { it.copy(
-            userLocation = Gps(latitude, longitude)
-        ) }
-    }
-
-
-    fun isLocationPermissionAlreadyGranted() : Boolean {
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    }
-
-
     /**
-     * If location is enabled, get last known location depending on SDK version, show it on the map
-     * and zoom on it.
+     * If permission is granted, get last known location depending, show it on the map and zoom on it.
      */
     @SuppressLint("MissingPermission")
     fun resolveLocation() {
         viewModelScope.launch {
-            if (LocationManagerCompat.isLocationEnabled(locationManager)) {
-                val location = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    locationManager.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
-                } else {
-                    locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                }
-                location?.let {
-                    updateUserLocation(location.latitude, location.longitude)
-                }
+            if (locationServices.isLocationPermissionAlreadyGranted()) {
+                _state.update { it.copy(
+                    userLocation = locationServices.resolveLocation()
+                ) }
             }
         }.invokeOnCompletion { showAndZoomOnUserLocation() }
 

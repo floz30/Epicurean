@@ -1,5 +1,6 @@
 package fr.floz.epicurean.ui.creation
 
+import android.location.Location
 import fr.floz.epicurean.domain.entities.Cuisine
 import fr.floz.epicurean.domain.entities.Element
 import fr.floz.epicurean.domain.entities.ElementType
@@ -34,7 +35,6 @@ data class ElementCreationUiState(
     // search cuisine dialog
     val showSearchDialog: Boolean = false,
 
-    val userLocation: Gps = Gps(0.0, 0.0),
-    val isUserLocationShow: Boolean = false
+    val userLocation: Location? = null
 
 )

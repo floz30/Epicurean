@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import fr.floz.epicurean.data.AppDatabase
 import fr.floz.epicurean.data.implementation.ElementsRepositoryImpl
+import fr.floz.epicurean.data.services.LocationServices
 import fr.floz.epicurean.data.services.local.ElementDao
 import fr.floz.epicurean.data.services.remote.OverpassApi
 import fr.floz.epicurean.data.services.remote.OverpassApiImpl
@@ -63,6 +64,12 @@ object AppModule {
                 })
             }
         }
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocationServices(@ApplicationContext context: Context): LocationServices {
+        return LocationServices(context)
     }
 
 }
