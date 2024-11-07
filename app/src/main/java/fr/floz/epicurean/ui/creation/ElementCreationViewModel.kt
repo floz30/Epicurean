@@ -6,12 +6,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -34,6 +33,7 @@ import fr.floz.epicurean.domain.entities.coordinates.Mercator
 import fr.floz.epicurean.domain.entities.toElementType
 import fr.floz.epicurean.domain.repo.ElementsRepository
 import fr.floz.epicurean.utils.doublePulseEffect
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,29 +72,21 @@ class ElementCreationViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), ElementCreationUiState())
 
-    var isLocationSelected by mutableStateOf(false)
-        private set
-
-    fun setLocationSelectedOrSkipped(value: Boolean) {
-        isLocationSelected = value
-    }
-
     // Search bar
     private val _searchCuisineText = MutableStateFlow("")
     val searchCuisineText = _searchCuisineText.asStateFlow()
-
-    private val _cuisines = repository.getAllCuisinesOrderedByNameAsc().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _cuisines = repository.getAllCuisinesOrderedByNameAsc()
     val cuisines = searchCuisineText
         .combine(_cuisines) { text, cuisines ->
             if (text.isBlank()) {
-                cuisines
+                cuisines.filter { cuisine -> cuisine !in _state.value.cuisine }  // we don't show the cuisines already attached to the element
             } else {
                 cuisines.filter {
-                    it.doesMatchSearchQuery(text)
+                    it !in _state.value.cuisine && it.doesMatchSearchQuery(text)
                 }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), _cuisines.value)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val tileStreamProvider = TileStreamProvider { row, col, zoom ->
         try {
@@ -106,11 +98,9 @@ class ElementCreationViewModel @Inject constructor(
             BufferedInputStream(connection.inputStream)
         } catch (e: Exception) {
             e.printStackTrace()
-
             null
         }
     }
-
     private val maxLevel = 16
     private val minLevel = 12
     private val mapSize = 256 * 2.0.pow(maxLevel).toInt()
@@ -121,8 +111,7 @@ class ElementCreationViewModel @Inject constructor(
         fullWidth = mapSize,
         fullHeight = mapSize,
         workerCount = 16
-    ) {
-        // Initial values
+    ) { // Initial values
         minimumScaleMode(Forced((1 / 2.0.pow(maxLevel - minLevel)).toFloat()))
         scroll(defaultScroll.x, defaultScroll.y)
     }.apply {
@@ -158,7 +147,7 @@ class ElementCreationViewModel @Inject constructor(
      */
     private fun createUserMarker(location: Mercator) {
         mapState.removeMarker("userLocation")
-        mapState.addMarker("userLocation", location.x, location.y, clickable =false) {
+        mapState.addMarker("userLocation", location.x, location.y, clickable = false) {
             Box(Modifier
                 .doublePulseEffect(targetScale = 5.5f, duration = 2500)
                 .requiredSize(10.dp)
@@ -166,6 +155,26 @@ class ElementCreationViewModel @Inject constructor(
                 .background(Color(0xFF1E90FF), CircleShape)
                 .border(1.dp, Color(0xFFFFFFFF), CircleShape)
             )
+        }
+    }
+
+    private fun userClickEffect(location: Mercator) {
+        viewModelScope.launch {
+            try {
+                mapState.addMarker("userClick", location.x, location.y, clickable = false, relativeOffset = Offset(x = -0.5f, y = -0.5f)) {
+                    Box(Modifier
+                        //.offset(y = (5).dp)
+                        .doublePulseEffect(2.5f)
+                        .requiredSize(20.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xA0FFA500), CircleShape)
+
+                    )
+                }
+                delay(2000)
+            } finally {
+                mapState.removeMarker("userClick")
+            }
         }
     }
 
@@ -185,6 +194,7 @@ class ElementCreationViewModel @Inject constructor(
 
     private fun onLongTap(x: Double, y: Double) {
         val gpsCoordinates = CoordinatesMapper.mapToEntity(Mercator(x, y))
+        userClickEffect(Mercator(x, y))
         viewModelScope.launch {
             val response = overpassApi.getElementsAroundLocation(gpsCoordinates.latitude, gpsCoordinates.longitude)
             if (response.osmElements.isNotEmpty()) {
@@ -196,6 +206,7 @@ class ElementCreationViewModel @Inject constructor(
         }
     }
 
+    // TODO : Extract this method from the viewmodel
     private fun mapOverpassResponseToRestaurants(response: OverpassResponse): List<Element> {
         return response.osmElements.map { it ->
             val location: Gps = when (it) {
@@ -294,9 +305,11 @@ class ElementCreationViewModel @Inject constructor(
                 ) }
             }
             is ElementCreationEvent.SetPostCode -> {
-                _state.update { it.copy(
-                    postCode = event.postCode
-                ) }
+                if (event.postCode.length <= 5) {
+                    _state.update { it.copy(
+                        postCode = event.postCode
+                    ) }
+                }
             }
             is ElementCreationEvent.AddCuisine -> {
                 _state.update { it.copy(
@@ -306,11 +319,6 @@ class ElementCreationViewModel @Inject constructor(
             is ElementCreationEvent.RemoveCuisine -> {
                 _state.update { it.copy(
                     cuisine = it.cuisine - event.cuisine
-                ) }
-            }
-            is ElementCreationEvent.SetCuisineTextFieldContent -> {
-                _state.update { it.copy(
-                    cuisineTextFieldContent = event.cuisine
                 ) }
             }
             is ElementCreationEvent.SetElementType -> {
@@ -365,17 +373,17 @@ class ElementCreationViewModel @Inject constructor(
                     showSearchDialog = !it.showSearchDialog
                 ) }
             }
+            is ElementCreationEvent.ShowForm -> {
+                _state.update { it.copy(
+                    isMapSelectedOrSkipped = event.value
+                ) }
+            }
+            is ElementCreationEvent.UpdateSearchField -> {
+                _searchCuisineText.update {
+                    event.fieldValue
+                }
+            }
         }
-    }
-
-    fun tempFun() {
-        _state.update { it.copy(
-            showSearchDialog = !it.showSearchDialog
-        ) }
-    }
-
-    fun tempFun2(value: String) {
-        _searchCuisineText.value = value
     }
 
     /**
@@ -400,7 +408,6 @@ class ElementCreationViewModel @Inject constructor(
             ) }
         }
     }
-
 
     /**
      * Reset fields at their default values.
@@ -436,5 +443,6 @@ class ElementCreationViewModel @Inject constructor(
         }.invokeOnCompletion { showAndZoomOnUserLocation() }
 
     }
+
 }
 

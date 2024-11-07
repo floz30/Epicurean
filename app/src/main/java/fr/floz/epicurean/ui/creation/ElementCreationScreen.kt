@@ -22,6 +22,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -51,6 +52,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
@@ -98,8 +103,8 @@ fun CreationHomeScreen(
     onBackPressed: () -> Unit,
     onConfirmPressed: () -> Unit = {}
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val isLocationSelected = viewModel.isLocationSelected
     val currentActivity = LocalContext.current.getActivity()
     // Permissions
     val dialogQueue = viewModel.visiblePermissionDialogQueue
@@ -136,16 +141,24 @@ fun CreationHomeScreen(
         }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
-            if (!isLocationSelected) TopBar(title = "Emplacement", confirmLabel = "Skip", onBackPressed = onBackPressed, onConfirmPressed = onConfirmPressed)
-            else TopBar(title = "Informations", confirmLabel = "Sauvegarder", onBackPressed = onBackPressed, onConfirmPressed = {
-                onEvent(ElementCreationEvent.SaveElement)
-                onConfirmPressed()
-            })
+            if (state.isMapSelectedOrSkipped)
+                TopBar(title = stringResource(R.string.topbar_creation_infos),
+                    confirmLabel = stringResource(R.string.action_save),
+                    onBackPressed = onBackPressed,
+                    onConfirmPressed = {
+                        onEvent(ElementCreationEvent.SaveElement)
+                        onConfirmPressed()
+                    })
+            else TopBar(title = stringResource(R.string.topbar_creation_map),
+                confirmLabel = stringResource(R.string.action_skip),
+                onBackPressed = onBackPressed,
+                onConfirmPressed = onConfirmPressed)
         },
         floatingActionButtonPosition = FabPosition.End,
         floatingActionButton = {
-            if (!isLocationSelected) {
+            if (!state.isMapSelectedOrSkipped) {
                 FloatingActionButton(
                     onClick = {
                         locationPermissionResultLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -154,14 +167,14 @@ fun CreationHomeScreen(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.baseline_my_location_24),
-                        contentDescription = "Me localiser"
+                        contentDescription = stringResource(R.string.action_locate_me)
                     )
                 }
             }
         }
     ) { padding ->
-        if (isLocationSelected) {
-            FormContent(padding, onEvent, state, viewModel)
+        if (state.isMapSelectedOrSkipped) {
+            FormContent(padding, onEvent, state, viewModel, snackbarHostState)
         } else {
             MapContent(padding, onEvent, viewModel.mapState, state) {
                 viewModel.importData()
@@ -213,7 +226,7 @@ private fun OsmDialog(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Importation de données",
+                    text = stringResource(R.string.form_label_import_data),
                     style = MaterialTheme.typography.headlineSmall
                 )
                 FilledIconButton(
@@ -223,7 +236,7 @@ private fun OsmDialog(
                         containerColor = MaterialTheme.colorScheme.outlineVariant
                     )
                 ) {
-                    Icon(Icons.Default.Close, "Fermer la boîte de dialogue", Modifier.size(18.dp))
+                    Icon(Icons.Default.Close, stringResource(R.string.action_dialog_close), Modifier.size(18.dp))
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -249,7 +262,7 @@ private fun OsmDialog(
                             )
                         },
                         leadingContent = {
-                            Icon(painterResource(it.type.icon), "Icone représentant le type de l'élément")
+                            Icon(painterResource(it.type.icon), null)
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier
@@ -270,7 +283,7 @@ private fun OsmDialog(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                 enabled = ((state.selectedElement?.id ?: 0L) != 0L)
             ) {
-                Text("Importer")
+                Text(stringResource(R.string.action_import))
             }
         }
     }
@@ -282,21 +295,41 @@ fun FormContent(
     innerPadding: PaddingValues,
     onEvent: (ElementCreationEvent) -> Unit,
     state: ElementCreationUiState,
-    viewModel: ElementCreationViewModel
+    viewModel: ElementCreationViewModel,
+    snackbarHostState: SnackbarHostState
 ) {
     val optionsType = ElementType.entries.toList()
     val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val (checkedState, onStateChange) = remember { mutableStateOf(false) }
 
     val searchText by viewModel.searchCuisineText.collectAsState()
     val cuisines by viewModel.cuisines.collectAsState()
     if (state.showSearchDialog) {
+        val undoLabel = stringResource(R.string.action_undo)
+        val successLabel = stringResource(R.string.snackbar_cuisine_added)
         CuisineSearchDialog(
             items = cuisines,
             searchFieldContent = searchText,
-            onSearch = { text -> viewModel.tempFun2(text) },
-            onItemClick = { item -> onEvent(ElementCreationEvent.AddCuisine(item)) },
-            onBack = { onEvent(ElementCreationEvent.ShowCuisineDialog) }
+            onSearch = { field -> onEvent(ElementCreationEvent.UpdateSearchField(field)) },
+            onItemClick = { item ->
+                onEvent(ElementCreationEvent.AddCuisine(item))
+                scope.launch {
+                    val snackbarResult = snackbarHostState.showSnackbar(
+                        message = successLabel.format(item),
+                        withDismissAction = true,
+                        actionLabel = undoLabel
+                    )
+                    when (snackbarResult) {
+                        SnackbarResult.Dismissed -> { }
+                        SnackbarResult.ActionPerformed -> {
+                            onEvent(ElementCreationEvent.RemoveCuisine(item))
+                        }
+                    }
+                }
+
+            },
+            onBack = { onEvent(ElementCreationEvent.ShowCuisineDialog) },
         )
     }
 
@@ -316,13 +349,13 @@ fun FormContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Type de cuisine servie",
+                    text = stringResource(R.string.form_label_cuisines),
                     style = MaterialTheme.typography.titleLarge
                 )
                 IconButton(
                     onClick = { onEvent(ElementCreationEvent.ShowCuisineDialog) }
                 ) {
-                    Icon(Icons.Default.Add, "Ajouter un type de cuisine")
+                    Icon(Icons.Default.Add, stringResource(R.string.action_add_cuisine_type))
                 }
             }
 
@@ -348,7 +381,7 @@ private fun BasicInfo(
     OutlinedTextField(
         value = state.name,
         onValueChange = { onEvent(ElementCreationEvent.SetName(it)) },
-        label = { Text("Nom") },
+        label = { Text(stringResource(R.string.form_label_name)) },
         modifier = Modifier.fillMaxWidth()
     )
 
@@ -361,14 +394,13 @@ private fun BasicInfo(
     ) {
         OutlinedTextField(
             readOnly = true,
-            label = { Text("Type") },
+            label = { Text(stringResource(R.string.form_label_type)) },
             value = stringResource(selectedOption.label),
-            leadingIcon = { Icon(painterResource(selectedOption.icon), contentDescription = "") },
+            leadingIcon = { Icon(painterResource(selectedOption.icon), contentDescription = null) },
             onValueChange = { },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(elementTypeDropdownExpanded)
             },
-            //colors = ExposedDropdownMenuDefaults.textFieldColors(),
             modifier = Modifier
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
@@ -380,7 +412,7 @@ private fun BasicInfo(
             optionsType.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(text = stringResource(option.label)) },
-                    leadingIcon = { Icon(painterResource(option.icon), contentDescription = "") },
+                    leadingIcon = { Icon(painterResource(option.icon), contentDescription = null) },
                     onClick = {
                         selectedOption = option
                         elementTypeDropdownExpanded = false
@@ -408,14 +440,15 @@ private fun ContactInfo(
             value = state.location.longitude.toString(),
             onValueChange = { },
             readOnly = true,
-            label = { Text("Longitude") }
+            label = { Text(stringResource(R.string.form_label_longitude)) }
         )
         Spacer(Modifier.width(10.dp))
         OutlinedTextField(
             modifier = Modifier.weight(1f),
             value = state.location.latitude.toString(),
             onValueChange = { },
-            label = { Text("Latitude") }
+            readOnly = true,
+            label = { Text(stringResource(R.string.form_label_latitude)) }
         )
     }
 
@@ -426,14 +459,15 @@ private fun ContactInfo(
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
-            label = { Text("N°") },
+            label = { Text(stringResource(R.string.form_label_housenumber)) },
             value = state.houseNumber,
             onValueChange = { onEvent(ElementCreationEvent.SetHouseNumber(it)) },
-            modifier = Modifier.weight(0.2f)
+            modifier = Modifier.weight(0.2f),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
         Spacer(Modifier.width(10.dp))
         OutlinedTextField(
-            label = { Text("Nom de rue") },
+            label = { Text(stringResource(R.string.form_label_streetname)) },
             value = state.streetName,
             onValueChange = { onEvent(ElementCreationEvent.SetStreetName(it)) },
             modifier = Modifier.weight(0.8f)
@@ -447,14 +481,15 @@ private fun ContactInfo(
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
-            label = { Text("Code") },
+            label = { Text(stringResource(R.string.form_label_postcode)) },
             value = state.postCode,
             onValueChange = { onEvent(ElementCreationEvent.SetPostCode(it)) },
-            modifier = Modifier.weight(0.4f)
+            modifier = Modifier.weight(0.4f),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
         Spacer(Modifier.width(10.dp))
         OutlinedTextField(
-            label = { Text("Ville") },
+            label = { Text(stringResource(R.string.form_label_city)) },
             value = state.city,
             onValueChange = { onEvent(ElementCreationEvent.SetCity(it)) },
             modifier = Modifier.weight(0.6f)
@@ -475,7 +510,7 @@ private fun ContactInfo(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "Accessible en chaine roulante ?",
+            text = stringResource(R.string.form_label_wheelchair),
             style = MaterialTheme.typography.bodyLarge
         )
         Checkbox(
@@ -489,9 +524,10 @@ private fun ContactInfo(
         modifier = Modifier.fillMaxWidth(),
         value = state.phone,
         onValueChange = { onEvent(ElementCreationEvent.SetPhone(it)) },
-        label = { Text("Télephone") },
+        label = { Text(stringResource(R.string.form_label_phone)) },
         prefix = { Text("+33") },
-        leadingIcon = { Icon(Icons.Default.Phone, "") }
+        leadingIcon = { Icon(Icons.Default.Phone, null) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
     )
 
     Spacer(Modifier.height(10.dp))
@@ -500,8 +536,9 @@ private fun ContactInfo(
         modifier = Modifier.fillMaxWidth(),
         value = state.website,
         onValueChange = { onEvent(ElementCreationEvent.SetWebsite(it)) },
-        label = { Text("Site internet") },
-        leadingIcon = { Icon(Icons.AutoMirrored.Default.ExitToApp, "") }
+        label = { Text(stringResource(R.string.form_label_website)) },
+        leadingIcon = { Icon(Icons.AutoMirrored.Default.ExitToApp, null) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
     )
 }
 

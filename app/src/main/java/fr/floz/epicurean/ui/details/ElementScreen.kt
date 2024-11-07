@@ -179,7 +179,7 @@ private fun RestaurantInfo(
         item {
             CircleInfo(
                 icon = if (isOpen) R.drawable.ic_shop_open else R.drawable.ic_shop_closed,
-                label = if (isOpen) R.string.restaurant_info_open else R.string.restaurant_info_closed,
+                label = if (isOpen) R.string.element_details_open else R.string.element_details_closed,
                 iconDescription = R.string.restaurant_info_opening_hours
             )
         }

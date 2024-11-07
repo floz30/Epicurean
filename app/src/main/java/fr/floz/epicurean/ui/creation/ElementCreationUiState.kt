@@ -12,7 +12,6 @@ data class ElementCreationUiState(
     val name: String = "",
     val type: ElementType = ElementType.UNKNOWN,
     val location: Gps = Coordinates.defaultGps,
-    val cuisineTextFieldContent: String = "",
     val cuisine: List<Cuisine> = emptyList(),
     val openingHours: String = "",
     val phone: String = "",
@@ -35,6 +34,8 @@ data class ElementCreationUiState(
     // search cuisine dialog
     val showSearchDialog: Boolean = false,
 
-    val userLocation: Location? = null
+    val userLocation: Location? = null,
+
+    val isMapSelectedOrSkipped: Boolean = false
 
 )

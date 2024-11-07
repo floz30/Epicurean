@@ -12,7 +12,6 @@ sealed interface ElementCreationEvent {
     data class SetLocation(val location: Gps): ElementCreationEvent
     data class AddCuisine(val cuisine: Cuisine): ElementCreationEvent
     data class RemoveCuisine(val cuisine: Cuisine): ElementCreationEvent
-    data class SetCuisineTextFieldContent(val cuisine: String): ElementCreationEvent
     data class SetOpeningHours(val openingHours: String): ElementCreationEvent
     data class SetPhone(val phone: String): ElementCreationEvent
     data class SetWebsite(val website: String): ElementCreationEvent
@@ -21,11 +20,12 @@ sealed interface ElementCreationEvent {
     data class SetHouseNumber(val houseNumber: String): ElementCreationEvent
     data class SetCity(val city: String): ElementCreationEvent
     data class SetPostCode(val postCode: String): ElementCreationEvent
+    data class UpdateSearchField(val fieldValue: String): ElementCreationEvent
 
     // Button action
     data object SaveElement: ElementCreationEvent
     data object ShowOsmDialog: ElementCreationEvent
     data class SelectOsmElement(val element: Element): ElementCreationEvent
-
+    data class ShowForm(val value: Boolean = true): ElementCreationEvent
     data object ShowCuisineDialog: ElementCreationEvent
 }

@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import fr.floz.epicurean.R
 import fr.floz.epicurean.ui.creation.CreationHomeScreen
+import fr.floz.epicurean.ui.creation.ElementCreationEvent
 import fr.floz.epicurean.ui.creation.ElementCreationViewModel
 import fr.floz.epicurean.ui.details.RestaurantScreen
 import fr.floz.epicurean.ui.list.ElementsListViewModel
@@ -142,7 +143,7 @@ fun MainContent() {
                         onEvent = viewModel::onEvent,
                         viewModel = viewModel,
                         onConfirmPressed = {
-                            viewModel.setLocationSelectedOrSkipped(true)
+                            viewModel.onEvent(ElementCreationEvent.ShowForm())
                             navController.navigate(CreationScreen)
                         },
                         onBackPressed = {
@@ -158,12 +159,12 @@ fun MainContent() {
                         onEvent = viewModel::onEvent,
                         viewModel = viewModel,
                         onConfirmPressed = {
-                            viewModel.setLocationSelectedOrSkipped(false) // reset screen for future creation
+                            viewModel.onEvent(ElementCreationEvent.ShowForm(false)) // reset screen for future creation
                             navController.navigate(ScreenList)
                             // PROBLEME : le modal bottom sheet s'affiche sur l'écran de liste pendant 2 secondes
                             },
                         onBackPressed = {
-                            viewModel.setLocationSelectedOrSkipped(false)
+                            viewModel.onEvent(ElementCreationEvent.ShowForm(false))
                             navController.navigateUp()
                         }
                     )
