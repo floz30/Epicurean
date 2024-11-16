@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,7 +54,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -60,7 +62,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -70,7 +71,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -79,6 +82,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.westnordost.osm_opening_hours.model.OpeningHours
 import fr.floz.epicurean.R
@@ -89,7 +93,6 @@ import fr.floz.epicurean.domain.entities.coordinates.Coordinates
 import fr.floz.epicurean.getActivity
 import fr.floz.epicurean.openAppSettings
 import fr.floz.epicurean.ui.utils.CuisineSearchDialog
-import fr.floz.epicurean.ui.utils.ListSwipeToDismiss
 import fr.floz.epicurean.ui.utils.LocationPermissionTextProvider
 import fr.floz.epicurean.ui.utils.PermissionDialog
 import kotlinx.coroutines.launch
@@ -112,11 +115,6 @@ fun CreationHomeScreen(
         viewModel.onPermissionResult(Manifest.permission.ACCESS_COARSE_LOCATION, isGranted) { viewModel.resolveLocation() }
     }
     viewModel.resolveLocation()
-
-//    if (viewModel.showToast.value) {
-//        Toast.makeText(LocalContext.current, "Localisation indisponible sur votre appareil", Toast.LENGTH_LONG).show()
-//        viewModel.showToast.value = false
-//    }
 
     dialogQueue
         .reversed()
@@ -148,8 +146,9 @@ fun CreationHomeScreen(
                     confirmLabel = stringResource(R.string.action_save),
                     onBackPressed = onBackPressed,
                     onConfirmPressed = {
-                        onEvent(ElementCreationEvent.SaveElement)
-                        onConfirmPressed()
+                        if (viewModel.saveElement()) {
+                            onConfirmPressed()
+                        }
                     })
             else TopBar(title = stringResource(R.string.topbar_creation_map),
                 confirmLabel = stringResource(R.string.action_skip),
@@ -193,7 +192,9 @@ fun MapContent(
     onImportClick: () -> Unit
 ) {
     Box(
-        modifier = Modifier.padding(innerPadding).fillMaxSize()
+        modifier = Modifier
+            .padding(innerPadding)
+            .fillMaxSize()
     ) {
         MapUI(
             state = mapState
@@ -201,7 +202,8 @@ fun MapContent(
     }
 
     if (state.showOsmDialog) {
-        OsmDialog(onEvent, state, onImportClick)
+        val elements = state.osmElements
+        OsmDialog(onEvent, elements, { state.selectedElement?.id } , onImportClick)
     }
 }
 
@@ -209,7 +211,8 @@ fun MapContent(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun OsmDialog(
     onEvent: (ElementCreationEvent) -> Unit,
-    state: ElementCreationUiState,
+    elements: List<Element>,
+    selectedElementId: () -> Long?,
     onImportClick: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -219,9 +222,14 @@ private fun OsmDialog(
         onDismissRequest = { scope.launch { sheetState.hide() }.invokeOnCompletion { onEvent(ElementCreationEvent.ShowOsmDialog) } },
         sheetState = sheetState
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -241,7 +249,7 @@ private fun OsmDialog(
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             LazyColumn(Modifier.selectableGroup()) {
-                items(state.osmElements) {
+                items(elements) {
                     ListItem(
                         headlineContent = {
                             Text(
@@ -257,7 +265,7 @@ private fun OsmDialog(
                         },
                         trailingContent = {
                             RadioButton(
-                                selected = (state.selectedElement?.id == it.id),
+                                selected = (selectedElementId() == it.id),
                                 onClick = null
                             )
                         },
@@ -270,7 +278,7 @@ private fun OsmDialog(
                             .height(56.dp)
                             .padding(horizontal = 16.dp)
                             .selectable(
-                                selected = (state.selectedElement?.id == it.id),
+                                selected = (selectedElementId() == it.id),
                                 onClick = { onEvent(ElementCreationEvent.SelectOsmElement(it)) },
                                 role = Role.RadioButton
                             )
@@ -280,8 +288,10 @@ private fun OsmDialog(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Button(
                 onClick = { onImportClick() },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                enabled = ((state.selectedElement?.id ?: 0L) != 0L)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                enabled = ((selectedElementId() ?: 0L) != 0L)
             ) {
                 Text(stringResource(R.string.action_import))
             }
@@ -290,6 +300,7 @@ private fun OsmDialog(
 }
 
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FormContent(
     innerPadding: PaddingValues,
@@ -337,7 +348,9 @@ fun FormContent(
         modifier = Modifier.padding(innerPadding)
     ) {
         Column(
-            modifier = Modifier.verticalScroll(scrollState).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+            modifier = Modifier
+                .verticalScroll(scrollState)
+                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
             BasicInfo(state, onEvent, optionsType)
             HorizontalDivider(Modifier.padding(vertical = 15.dp))
@@ -360,11 +373,28 @@ fun FormContent(
             }
 
             Spacer(Modifier.height(10.dp))
-            ListSwipeToDismiss(
-                items = state.cuisine,
-                height = (state.cuisine.size * 56).dp,
-                onDelete = { item -> onEvent(ElementCreationEvent.RemoveCuisine(item)) }
-            )
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+            ) {
+                state.cuisine.forEach { cuisine ->
+
+                    Card(Modifier.clip(RectangleShape)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 16.dp)
+                        ) {
+                            Text(cuisine.label)
+                            IconButton(onClick = { onEvent(ElementCreationEvent.RemoveCuisine(cuisine)) }) {
+                                Icon(Icons.Default.Close, stringResource(R.string.action_delete))
+                            }
+                        }
+
+                    }
+                }
+            }
         }
     }
 }
@@ -377,7 +407,8 @@ private fun BasicInfo(
     optionsType: List<ElementType>
 ) {
     var elementTypeDropdownExpanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(optionsType[0]) }
+    var selectedOption by remember { mutableStateOf(state.type) }
+
     OutlinedTextField(
         value = state.name,
         onValueChange = { onEvent(ElementCreationEvent.SetName(it)) },
@@ -571,11 +602,9 @@ private fun TopBar(
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Preview
 @Composable
-fun Alouette() {
-
+fun OsmDialogPreview() {
     val data = listOf(
         Element(1, "La pause libanaise", ElementType.BAR, Coordinates.defaultGps, OpeningHours(), "", "", true, Address(), System.currentTimeMillis(), emptyList()),
         Element(2, "Mc Donalds", ElementType.FAST_FOOD, Coordinates.defaultGps, OpeningHours(), "", "", true, Address(), System.currentTimeMillis(), emptyList()),
@@ -583,88 +612,32 @@ fun Alouette() {
         Element(4, "Babilou", ElementType.UNKNOWN, Coordinates.defaultGps, OpeningHours(), "", "", true, Address(), System.currentTimeMillis(), emptyList()),
     )
 
-    ModalBottomSheet(
-        onDismissRequest = {  },
-        sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.Expanded)
-    ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Importation de données",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                FilledIconButton(
-                    onClick = { },
-                    modifier = Modifier.size(30.dp),
-                    colors = IconButtonDefaults.iconButtonColors().copy(
-                        containerColor = MaterialTheme.colorScheme.outlineVariant
-                    )
-                ) {
-                    Icon(Icons.Default.Close, "", Modifier.size(18.dp))
-                }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            LazyColumn(Modifier.selectableGroup()) {
-                items(data) { e ->
-                    val name = e.name
-                    val type = e.type
-
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                text = name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                //modifier = Modifier.padding(start = 16.dp)
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                text = stringResource(type.label),
-                                style = MaterialTheme.typography.bodySmall,
-                                //modifier = Modifier.padding(start = 16.dp)
-                            )
-                        },
-                        trailingContent = {
-                            RadioButton(
-                                selected = false,
-                                onClick = null
-                            )
-                        },
-                        leadingContent = {
-                            Icon(painterResource(type.icon), "")
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .padding(horizontal = 16.dp)
-                            .selectable(
-                                selected = false,
-                                onClick = {  },
-                                role = Role.RadioButton
-                            )
-                    )
-                }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Button(
-                onClick = {  },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                enabled = true
-            ) {
-                Text("Importer")
-            }
-        }
-    }
-
+    OsmDialog(
+        onEvent = { _ -> },
+        elements = data,
+        selectedElementId = { 0 }
+    ) { }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun FormPreview() {
-    //FormContent(PaddingValues(5.dp), { _ -> }, ElementCreationUiState())
+    val snackbarHostState = remember { SnackbarHostState() }
+    FormContent(
+        innerPadding = PaddingValues(5.dp),
+        onEvent = { _ -> },
+        state = ElementCreationUiState(),
+        viewModel = hiltViewModel<ElementCreationViewModel>(),
+        snackbarHostState = snackbarHostState
+    )
+}
+
+@Preview
+@Composable
+fun TopBarPreview() {
+    TopBar(
+        title = "Title",
+        confirmLabel = "Ok",
+        onBackPressed = {  }
+    ) { }
 }

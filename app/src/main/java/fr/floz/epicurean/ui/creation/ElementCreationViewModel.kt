@@ -163,7 +163,6 @@ class ElementCreationViewModel @Inject constructor(
             try {
                 mapState.addMarker("userClick", location.x, location.y, clickable = false, relativeOffset = Offset(x = -0.5f, y = -0.5f)) {
                     Box(Modifier
-                        //.offset(y = (5).dp)
                         .doublePulseEffect(2.5f)
                         .requiredSize(20.dp)
                         .clip(CircleShape)
@@ -208,7 +207,7 @@ class ElementCreationViewModel @Inject constructor(
 
     // TODO : Extract this method from the viewmodel
     private fun mapOverpassResponseToRestaurants(response: OverpassResponse): List<Element> {
-        return response.osmElements.map { it ->
+        return response.osmElements.map {
             val location: Gps = when (it) {
                 is Node -> Gps(it.latitude, it.longitude)
                 is Way -> Gps(it.bounds.center.first, it.bounds.center.second)
@@ -245,50 +244,52 @@ class ElementCreationViewModel @Inject constructor(
         }
     }
 
+    fun saveElement() : Boolean {
+        val name = state.value.name
+        val type = state.value.type
+        val location = state.value.location
+        val cuisine = state.value.cuisine
+        val openingHours = state.value.openingHours
+        val phone = state.value.phone
+        val website = state.value.website
+        val isWheelchairAccessible = state.value.isWheelchairAccessible
+        val address = Address(
+            houseNumber = state.value.houseNumber.toIntOrNull(),
+            streetName = state.value.streetName,
+            postCode = state.value.postCode.toIntOrNull(),
+            city = state.value.city
+        )
+
+        if (name.isBlank()) {
+            return false // check required values
+        }
+
+        viewModelScope.launch {
+            repository.saveElement(
+                Element(
+                    name = name,
+                    type = type,
+                    location = location,
+                    lastEditedAt = System.currentTimeMillis(),
+                    cuisines = cuisine,
+                    openingHours = openingHours.toOpeningHoursOrNull(),
+                    phone = phone,
+                    website = website,
+                    isWheelchairAccessible = isWheelchairAccessible,
+                    address = address
+                )
+            )
+        }
+
+        clearFormFields()
+        return true
+    }
+
     /**
      * UI event handling.
      */
     fun onEvent(event: ElementCreationEvent) {
         when (event) {
-            ElementCreationEvent.SaveElement -> {
-                val name = state.value.name
-                val type = state.value.type
-                val location = state.value.location
-                val cuisine = state.value.cuisine
-                val openingHours = state.value.openingHours
-                val phone = state.value.phone
-                val website = state.value.website
-                val isWheelchairAccessible = state.value.isWheelchairAccessible
-                val address = Address(
-                    houseNumber = state.value.houseNumber.toInt(),
-                    streetName = state.value.streetName,
-                    postCode = state.value.postCode.toInt(),
-                    city = state.value.city
-                )
-
-                if (name.isBlank()) {
-                    return // check required values
-                }
-
-                viewModelScope.launch {
-                    repository.saveElement(
-                        Element(
-                            name = name,
-                            type = type,
-                            location = location,
-                            lastEditedAt = System.currentTimeMillis(),
-                            cuisines = cuisine,
-                            openingHours = openingHours.toOpeningHoursOrNull(),
-                            phone = phone,
-                            website = website,
-                            isWheelchairAccessible = isWheelchairAccessible,
-                            address = address
-                        )
-                    )
-                }
-
-                clearFormFields()
-            }
             is ElementCreationEvent.SetStreetName -> {
                 _state.update { it.copy(
                     streetName = event.streetName

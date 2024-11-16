@@ -54,4 +54,5 @@
     <string name="form_label_import_data">Importation de données</string>
     <string name="action_undo">Annuler</string>
     <string name="snackbar_cuisine_added">%s a été ajouté</string>
+    <string name="action_delete">Supprimer</string>
 </resources>

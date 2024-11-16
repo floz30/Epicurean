@@ -25,7 +25,7 @@ enum class ElementType(
 }
 
 
-fun String?.toElementType(): ElementType = when (this) {
+fun String?.toElementType(): ElementType = when (this?.lowercase()) {
     "bar" -> ElementType.BAR
     "cafe" -> ElementType.CAFE
     "fast_food" -> ElementType.FAST_FOOD

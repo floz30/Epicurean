@@ -23,7 +23,6 @@ sealed interface ElementCreationEvent {
     data class UpdateSearchField(val fieldValue: String): ElementCreationEvent
 
     // Button action
-    data object SaveElement: ElementCreationEvent
     data object ShowOsmDialog: ElementCreationEvent
     data class SelectOsmElement(val element: Element): ElementCreationEvent
     data class ShowForm(val value: Boolean = true): ElementCreationEvent
