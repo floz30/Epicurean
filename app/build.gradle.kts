@@ -87,6 +87,8 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     ksp(libs.hilt.android.compiler)
+    // Splash screen
+    implementation(libs.androidx.core.splashscreen)
 
     implementation(libs.kotlinx.serialization.json)
 

@@ -9,6 +9,11 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dagger.hilt.android.AndroidEntryPoint
 import fr.floz.epicurean.ui.MainContent
 
@@ -17,12 +22,16 @@ import fr.floz.epicurean.ui.MainContent
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        //enableEdgeToEdge()
+        enableEdgeToEdge()
 
         super.onCreate(savedInstanceState)
 
+        installSplashScreen()
+
         setContent {
-            MainContent()
+            Box(Modifier.safeDrawingPadding()) {
+                MainContent()
+            }
         }
     }
 
